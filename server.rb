@@ -17,6 +17,10 @@ end
 
 begin
   UNIXServer.open(SOCKET_FILE) {|serv|
+    at_exit {
+      puts "Exit"
+      File.delete(SOCKET_FILE)
+    }
     loop do
       s = serv.accept
       puts "accept #{s}"
