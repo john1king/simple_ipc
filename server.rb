@@ -48,7 +48,6 @@ module IPC
       retry
     end
 
-
     def write(data)
       writepartial [data.size].pack('N')
       writepartial data
@@ -67,6 +66,15 @@ module IPC
       writeable = IO.select(nil, [@socket], nil, @timeout || 1)
       raise Timeout, 'write timeout' if !writeable && @timeout
       retry
+    end
+
+
+    def send(data)
+      write JSON.dump(data)
+    end
+
+    def recv
+      JSON.parse(read)
     end
 
     def close
@@ -116,7 +124,7 @@ module IPC
 
     def self.open(add, options = {})
       client = new(add, options)
-      yield client
+      yield client.socket
     ensure
       client.close
     end
@@ -125,10 +133,6 @@ module IPC
       @addr = addr
       @socket = SocketIO.new UNIXSocket.new(addr), options[:timeout]
       @options = options
-    end
-
-    def send(data)
-      @socket.write JSON.dump(data)
     end
 
     def close
