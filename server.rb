@@ -5,30 +5,45 @@ require "socket"
 SOCKET_FILE = "/tmp/oh_my_sock"
 
 def server_exist?
-  UNIXSocket.open(SOCKET_FILE) {|c|
-    c.puts "check"
-    c.close
-  }
+  UNIXSocket.new(SOCKET_FILE).close
   true
 rescue Errno::ECONNREFUSED
   false
 end
 
 
+class Timeout < StandardError
+end
+
 begin
-  UNIXServer.open(SOCKET_FILE) {|serv|
-    at_exit {
-      puts "Exit"
-      File.delete(SOCKET_FILE)
-    }
-    loop do
-      s = serv.accept
-      puts "accept #{s}"
-      string = s.read
-      puts string
-      s.close
-    end
+  server = UNIXServer.new(SOCKET_FILE)
+  at_exit {
+    puts "Exit"
+    File.delete(SOCKET_FILE) if File.exist?(SOCKET_FILE)
   }
+  loop do
+    socket = server.accept
+    puts "accept #{socket}"
+    t = Time.now
+    while true
+      buf = ''
+      begin
+        data = socket.recv_nonblock(5)
+        if data.empty?
+          break
+        else
+          buf << data
+        end
+      rescue IO::WaitReadable
+        x = Time.now
+        results = IO.select([socket], nil, nil, 3)
+        raise Timeout, 'read timeout' unless results
+      end
+    end
+    puts "used #{Time.now - t}"
+    puts buf
+    socket.close
+  end
 rescue Errno::EADDRINUSE
   unless server_exist?
     puts "Remove #{SOCKET_FILE}"
@@ -36,6 +51,6 @@ rescue Errno::EADDRINUSE
     retry
   end
   puts "A server is already running."
+ensure
+  server.close if server
 end
-
-
