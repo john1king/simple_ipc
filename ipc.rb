@@ -4,10 +4,10 @@ require "json"
 module IPC
   CHUNK_SIZE = 16 * 1024
 
-  class TransportError < StandardError; end
-  class Timeout < TransportError; end
-  class ClientError < TransportError; end
-  class ServerError < TransportError; end
+  class Error < StandardError; end
+  class ConnectionError < Error; end
+  class Timeout < Error; end
+  class TransportError < Error; end
 
   class SocketIO
 
@@ -19,12 +19,12 @@ module IPC
     # 通信协议: 前4个字节为消息长度
     def read
       head = readpartial(4)
-      raise ClientError, 'Invalid head' if !head || head.size < 4
+      raise TransportError, 'Invalid head' if !head || head.size < 4
       body_size = head.unpack('N')[0]
       return '' if body_size == 0
       data = readpartial(body_size)
       unless data && data.size == body_size
-        raise ClientError, "Invalid body size, expect #{body_size} but #{data.size}"
+        raise TransportError, "Invalid body size, expect #{body_size} but #{data.size}"
       end
       data
     end
@@ -122,11 +122,13 @@ module IPC
   class Client
     attr_reader :socket
 
-    def self.open(add, options = {})
-      client = new(add, options)
+    def self.open(addr, options = {})
+      client = new(addr, options)
       yield client.socket
+    rescue Errno::ENOENT
+      raise ConnectionError, "Can not connect to server #{addr}"
     ensure
-      client.close
+      client.close if client
     end
 
     def initialize(addr, options = {})
